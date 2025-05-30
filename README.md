@@ -1,3 +1,5 @@
+# Untitled
+
 ## Project Overview
 
 This project demonstrates the automated deployment of a **highly available, scalable, and secure three-tier web application architecture on Amazon Web Services (AWS)**. It showcases the power of Infrastructure as Code (IaC) by providing complete provisioning scripts using both **Terraform** and **AWS CloudFormation**.
@@ -35,38 +37,50 @@ This project uses a modular Terraform approach.
 
 **Steps:**
 
-1. **Clone the repository:**Bash
+1. **Clone the repository**
     
-    `git clone https://github.com/Techikrish/three-tier-architecture-on-aws-terraform-cloudformation-.git
-    cd three-tier-architecture-on-aws-terraform-cloudformation/terraform`
+    ```bash
+    git clone https://github.com/Techikrish/three-tier-architecture-on-aws-terraform-cloudformation-.git
+    cd three-tier-architecture-on-aws-terraform-cloudformation/Terraform
+    ```
     
 2. **Initialize Terraform:**
-Terraform will download the necessary providers and configure the S3 backend (ensure your S3 bucket and DynamoDB table for state locking exist and are correctly configured as per `backend.tf`) Replace with your S3 bucket name and Replace with your DynamoDB table name .Bash
+Terraform will download the necessary providers and configure the S3 backend (ensure your S3 bucket and DynamoDB table for state locking exist and are correctly configured as per `backend.tf`) Replace with your S3 bucket name and Replace with your DynamoDB table name 
     
-    `terraform init`
+    ```bash
+    terraform init
+    ```
     
 3. **Review the plan:**
-This command shows you what Terraform will create, modify, or destroy.Bash
+This command shows you what Terraform will create, modify, or destroy
     
-    `terraform plan`
+    ```bash
+    terraform plan
+    ```
     
 4. **Apply the configuration:**
-This will provision all the AWS resources.Bash
+This will provision all the AWS resources
     
-    `terraform apply --auto-approve`
+    ```bash
+    terraform apply --auto-approve
+    ```
     
 5. **Access the Application:**
-Once `terraform apply` is complete, get the ALB DNS name from the Terraform output:Bash
+Once `terraform apply` is complete, get the ALB DNS name from the Terraform output
     
-    `terraform output alb_dns_name`
+    ```bash
+    terraform output alb_dns_name
+    ```
     
     Open the DNS name in your web browser. You should see a PHP info page.
     To verify database connectivity, append `/db-test.php` to the ALB DNS name (e.g., `http://<ALB_DNS_NAME>/db-test.php`).
     
 6. **Clean up (Destroy Resources):**
-To avoid incurring AWS costs, always remember to destroy the resources when you're done.Bash
+To avoid incurring AWS costs, always remember to destroy the resources when you're done
     
-    `terraform destroy --auto-approve`
+    ```bash
+    terraform destroy --auto-approve
+    ```
     
 
 ---
@@ -82,27 +96,32 @@ This project uses CloudFormation templates for native AWS provisioning. You'll d
 
 **Steps:**
 
-1. **Clone the repository:**Bash
+1. **Clone the repository:**
+
+```bash
+git clone https://github.com/Techikrish/three-tier-architecture-on-aws-terraform-cloudformation-.git
+cd three-tier-architecture-on-aws-terraform-cloudformation/Cloudformation
+```
+
+1. **Deploy the Network Stack**
     
-    `git clone https://github.com/Techikrish/three-tier-architecture-on-aws-terraform-cloudformation-.git
-    cd three-tier-architecture-on-aws-terraform-cloudformation/terraform`
-    
-2. **Deploy the Network Stack:**Bash
-    
-    `aws cloudformation create-stack \
+    ```bash
+    aws cloudformation create-stack \
       --stack-name ThreeTierNetworkStack \
       --template-body file://three-tier-architecture-network.yaml \
       --parameters ParameterKey=ProjectName,ParameterValue=three-tier-app \
                    ParameterKey=AvailabilityZone1,ParameterValue=us-east-1a \
                    ParameterKey=AvailabilityZone2,ParameterValue=us-east-1b \
-      --capabilities CAPABILITY_IAM # Required if your template creates IAM roles`
+      --capabilities CAPABILITY_IAM # Required if your template creates IAM roles
+    ```
     
     *(Adjust `AvailabilityZone1` and `AvailabilityZone2` to your desired region's AZs, e.g., `ap-south-1a`, `ap-south-1b`)*
     
-3. **Deploy the Database Stack:**
-Wait for the `ThreeTierNetworkStack` to complete (`CREATE_COMPLETE`). You'll need to provide database credentials.Bash
+2. **Deploy the Database Stack:**
+Wait for the `ThreeTierNetworkStack` to complete (`CREATE_COMPLETE`). You'll need to provide database credentials
     
-    `aws cloudformation create-stack \
+    ```bash
+    aws cloudformation create-stack \
       --stack-name ThreeTierDatabaseStack \
       --template-body file://three-tier-architecture-database.yaml \
       --parameters ParameterKey=ProjectName,ParameterValue=three-tier-app \
@@ -111,12 +130,14 @@ Wait for the `ThreeTierNetworkStack` to complete (`CREATE_COMPLETE`). You'll nee
                    ParameterKey=DbName,ParameterValue=webappdb \
                    ParameterKey=DbEngineVersion,ParameterValue=8.0 \
                    ParameterKey=DbInstanceClass,ParameterValue=db.t3.micro \
-      --capabilities CAPABILITY_IAM`
+      --capabilities CAPABILITY_IAM
+    ```
     
-4. **Deploy the Application Stack:**
-Wait for the `ThreeTierDatabaseStack` to complete. You'll need the database endpoint from the database stack's outputs.Bash
+3. **Deploy the Application Stack:**
+Wait for the `ThreeTierDatabaseStack` to complete. You'll need the database endpoint from the database stack's outputs.
     
-    `# First, get the DB Endpoint from the Database stack outputs
+    ```bash
+    # First, get the DB Endpoint from the Database stack outputs
     DB_ENDPOINT=$(aws cloudformation describe-stacks --stack-name ThreeTierDatabaseStack --query "Stacks[0].Outputs[?OutputKey=='DbEndpoint'].OutputValue" --output text)
     echo "DB Endpoint: $DB_ENDPOINT"
     
@@ -130,20 +151,23 @@ Wait for the `ThreeTierDatabaseStack` to complete. You'll need the database endp
                    ParameterKey=DbUsername,ParameterValue=<YOUR_DB_USERNAME> \
                    ParameterKey=DbPassword,ParameterValue=<YOUR_DB_PASSWORD> \
                    ParameterKey=DbName,ParameterValue=webappdb \
-      --capabilities CAPABILITY_IAM`
+      --capabilities CAPABILITY_IAM
+    ```
     
     *(Replace `<YOUR_REGION_AMI_ID>` with an actual Amazon Linux 2 AMI ID for your chosen region, and fill in your DB credentials again.)*
     
-5. **Access the Application:**
+4. **Access the Application:**
 Once the `ThreeTierApplicationStack` is complete, find the ALB DNS Name in its outputs (either via console or CLI `describe-stacks`). Open the DNS name in your browser.
-6. **Clean up (Delete Stacks):**
-Delete stacks in reverse order of creation:Bash
-    
-    `aws cloudformation delete-stack --stack-name ThreeTierApplicationStack
-    aws cloudformation wait stack-delete-complete --stack-name ThreeTierApplicationStack
-    
-    aws cloudformation delete-stack --stack-name ThreeTierDatabaseStack
-    aws cloudformation wait stack-delete-complete --stack-name ThreeTierDatabaseStack
-    
-    aws cloudformation delete-stack --stack-name ThreeTierNetworkStack
-    aws cloudformation wait stack-delete-complete --stack-name ThreeTierNetworkStack`
+5. **Clean up (Delete Stacks):**
+Delete stacks in reverse order of creation
+
+```bash
+aws cloudformation delete-stack --stack-name ThreeTierApplicationStack
+aws cloudformation wait stack-delete-complete --stack-name ThreeTierApplicationStack
+
+aws cloudformation delete-stack --stack-name ThreeTierDatabaseStack
+aws cloudformation wait stack-delete-complete --stack-name ThreeTierDatabaseStack
+
+aws cloudformation delete-stack --stack-name ThreeTierNetworkStack
+aws cloudformation wait stack-delete-complete --stack-name ThreeTierNetworkStack
+```
