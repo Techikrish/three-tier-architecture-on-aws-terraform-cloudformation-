@@ -1,0 +1,214 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: CloudFormation template for the Application Layer of a three-tier app.
+
+Parameters:
+  ProjectName:
+    Description: Name of the project.
+    Type: String
+
+  VpcId:
+    Description: The VPC ID from the networking stack.
+    Type: String
+    Default: !ImportValue 'three-tier-app-VPCID' # Assuming ProjectName is 'three-tier-app'
+
+  PublicSubnetIds:
+    Description: Comma-separated list of public subnet IDs.
+    Type: CommaDelimitedList
+    Default: !ImportValue 'three-tier-app-PublicSubnetIDs'
+
+  ApplicationSubnetIds:
+    Description: Comma-separated list of application subnet IDs.
+    Type: CommaDelimitedList
+    Default: !ImportValue 'three-tier-app-ApplicationSubnetIDs'
+
+  ALBSecurityGroupId:
+    Description: The ALB Security Group ID.
+    Type: String
+    Default: !ImportValue 'three-tier-app-ALBSecurityGroupID'
+
+  AppServersSecurityGroupId:
+    Description: The App Servers Security Group ID.
+    Type: String
+    Default: !ImportValue 'three-tier-app-AppServersSecurityGroupID'
+
+  AmiId:
+    Description: AMI ID for EC2 instances (Amazon Linux 2).
+    Type: AWS::EC2::Image::Id # Recommended type for AMI ID
+    Default: ami-0f5ee92e62cd39634 # Example for us-east-1, find latest for your region!
+
+  InstanceType:
+    Description: EC2 instance type for application servers.
+    Type: String
+    Default: t2.micro
+
+  MinSize:
+    Description: Minimum number of application instances.
+    Type: Number
+    Default: 1
+
+  MaxSize:
+    Description: Maximum number of application instances.
+    Type: Number
+    Default: 2
+
+  DesiredCapacity:
+    Description: Desired number of application instances.
+    Type: Number
+    Default: 1
+
+  DbEndpoint:
+    Description: The RDS Database endpoint.
+    Type: String # This will be imported from the Database stack output
+
+  DbUsername:
+    Description: Database master username.
+    Type: String
+
+  DbPassword:
+    Description: Database master password.
+    Type: String
+    NoEcho: true # Hides value in console
+
+  DbName:
+    Description: Database name.
+    Type: String
+
+Resources:
+  # IAM Role and Instance Profile for EC2
+  EC2InstanceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ec2.amazonaws.com
+            Action: sts:AssumeRole
+      Tags:
+        - Key: Name
+          Value: !Sub '${ProjectName}-ec2-instance-role'
+  EC2InstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      InstanceProfileName: !Sub '${ProjectName}-ec2-instance-profile'
+      Roles:
+        - !Ref EC2InstanceRole
+      Tags:
+        - Key: Name
+          Value: !Sub '${ProjectName}-ec2-instance-profile'
+
+  # Application Load Balancer
+  ApplicationLoadBalancer:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      Name: !Sub '${ProjectName}-alb'
+      Scheme: internet-facing
+      Subnets: !Ref PublicSubnetIds
+      SecurityGroups:
+        - !Ref ALBSecurityGroupId
+      Tags:
+        - Key: Name
+          Value: !Sub '${ProjectName}-alb'
+
+  # ALB Target Group
+  ApplicationTargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      Name: !Sub '${ProjectName}-tg'
+      Port: 80
+      Protocol: HTTP
+      VpcId: !Ref VpcId
+      HealthCheckPath: /
+      HealthCheckProtocol: HTTP
+      HealthCheckMatcher: '200'
+      HealthCheckIntervalSeconds: 30
+      HealthCheckTimeoutSeconds: 5
+      HealthyThresholdCount: 3
+      UnhealthyThresholdCount: 3
+      Tags:
+        - Key: Name
+          Value: !Sub '${ProjectName}-tg'
+
+  # ALB Listener
+  ApplicationListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      DefaultActions:
+        - Type: forward
+          TargetGroupArn: !Ref ApplicationTargetGroup
+      LoadBalancerArn: !Ref ApplicationLoadBalancer
+      Port: 80
+      Protocol: HTTP
+
+  # Launch Template
+  AppLaunchTemplate:
+    Type: AWS::EC2::LaunchTemplate
+    Properties:
+      LaunchTemplateName: !Sub '${ProjectName}-app-lt'
+      LaunchTemplateData:
+        ImageId: !Ref AmiId
+        InstanceType: !Ref InstanceType
+        NetworkInterfaces:
+          - DeviceIndex: 0
+            AssociatePublicIpAddress: false
+            Groups:
+              - !Ref AppServersSecurityGroupId
+        IamInstanceProfile:
+          Name: !Ref EC2InstanceProfile
+        UserData: !Base64 | # Use !Base64 to encode the user data script
+          #!/bin/bash
+          yum update -y
+          yum install -y httpd php php-mysqlnd
+          systemctl start httpd
+          systemctl enable httpd
+          echo "<?php phpinfo(); ?>" > /var/www/html/index.php
+          echo "<?php
+          \$servername = \"${DbEndpoint}\";
+          \$username = \"${DbUsername}\";
+          \$password = \"${DbPassword}\";
+          \$dbname = \"${DbName}\";
+          \$conn = new mysqli(\$servername, \$username, \$password, \$dbname);
+          if (\$conn->connect_error) {
+              die(\"Connection failed: \" . \$conn->connect_error);
+          }
+          echo \"Connected successfully to DB: \$dbname at \$servername!\";
+          \$conn->close();
+          ?>" > /var/www/html/db-test.php
+      Tags: # Tags for the Launch Template resource itself
+        - Key: Name
+          Value: !Sub '${ProjectName}-app-launch-template'
+
+  # Auto Scaling Group
+  ApplicationAutoScalingGroup:
+    Type: AWS::AutoScaling::AutoScalingGroup
+    Properties:
+      AutoScalingGroupName: !Sub '${ProjectName}-app-asg'
+      LaunchTemplate:
+        LaunchTemplateId: !Ref AppLaunchTemplate
+        Version: '$Latest' # Reference the latest version of the launch template
+      VPCZoneIdentifier: !Ref ApplicationSubnetIds
+      MinSize: !Ref MinSize
+      MaxSize: !Ref MaxSize
+      DesiredCapacity: !Ref DesiredCapacity
+      TargetGroupARNs:
+        - !Ref ApplicationTargetGroup
+      HealthCheckType: ELB
+      HealthCheckGracePeriod: 300
+      Tags: # CloudFormation ASG tags are a list of TagProperty
+        - Key: Name
+          Value: !Sub '${ProjectName}-app-instance'
+          PropagateAtLaunch: true
+        - Key: Environment
+          Value: !Ref ProjectName
+          PropagateAtLaunch: true
+        - Key: AutoScalingGroupName # Best practice to include ASG name in tags
+          Value: !Ref ApplicationAutoScalingGroup
+          PropagateAtLaunch: false # This tag is for the ASG resource itself
+
+Outputs:
+  AlbDnsName:
+    Description: The DNS name of the Application Load Balancer.
+    Value: !GetAtt ApplicationLoadBalancer.DNSName
+    Export:
+      Name: !Sub '${ProjectName}-ALBDnsName'
