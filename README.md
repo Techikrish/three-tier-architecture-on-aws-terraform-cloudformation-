@@ -1,5 +1,3 @@
-# Untitled
-
 ## Project Overview
 
 This project demonstrates the automated deployment of a **highly available, scalable, and secure three-tier web application architecture on Amazon Web Services (AWS)**. It showcases the power of Infrastructure as Code (IaC) by providing complete provisioning scripts using both **Terraform** and **AWS CloudFormation**.
