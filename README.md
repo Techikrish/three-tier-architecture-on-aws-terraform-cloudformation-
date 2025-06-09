@@ -3,6 +3,7 @@
 This project demonstrates the automated deployment of a **highly available, scalable, and secure three-tier web application architecture on Amazon Web Services (AWS)**. It showcases the power of Infrastructure as Code (IaC) by providing complete provisioning scripts using both **Terraform** and **AWS CloudFormation**.
 
 For Terraform, the project utilizes **Amazon S3 for remote state management** and **Amazon DynamoDB for state locking**, ensuring collaborative development and preventing concurrent infrastructure modifications.
+![Three-tier-aws.png](Three-tier-aws.png)
 
 ## Architecture
 
